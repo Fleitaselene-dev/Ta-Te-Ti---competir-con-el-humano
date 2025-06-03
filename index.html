@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.0.0/dist/tf.min.js"></script>
+    <style>
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 60px);
+        grid-gap: 5px;
+        margin: 20px 0;
+      }
+      .grid input {
+        width: 60px;
+        height: 60px;
+        font-size: 24px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Ta-Te-Ti con IA</h1>
+    <p>Ingresá el número 1 donde querés jugar.</p>
+    <ul><strong>1</strong>: ficha del jugador</ul>
+    <ul><strong>-1</strong>: ficha de la IA</ul>
+    <ul><strong>0</strong>: casilla vacía</ul>
+
+    <div class="grid" id="board">
+      <input type="number" min="-1" max="1" value="0">
+      <input type="number" min="-1" max="1" value="0">
+      <input type="number" min="-1" max="1" value="0">
+      <input type="number" min="-1" max="1" value="0">
+      <input type="number" min="-1" max="1" value="0">
+      <input type="number" min="-1" max="1" value="0">
+      <input type="number" min="-1" max="1" value="0">
+      <input type="number" min="-1" max="1" value="0">
+      <input type="number" min="-1" max="1" value="0">
+    </div>
+
+    <button onclick="analizarTablero()">Analizar jugada</button>
+    <button onclick="reiniciarTablero()">Reiniciar</button>
+
+    <div id="result"></div>
+
+    <script>
+      let model;
+
+      async function cargarModelo() {
+        await tf.ready();
+        model = await tf.loadLayersModel('model/ttt_model.json');
+      }
+
+      cargarModelo();
+
+      async function analizarTablero() {
+        const inputs = document.querySelectorAll('#board input');
+        const values = Array.from(inputs).map(input => Number(input.value || 0));
+
+        if (values.length !== 9 || values.some(v => ![-1, 0, 1].includes(v))) {
+          document.getElementById('result').innerHTML = '<span>Error: Solo se permiten números -1, 0 o 1.</span>';
+          return;
+        }
+
+        function verificarGanador(valores, jugador) {
+          const ganadoras = [
+            [0,1,2], [3,4,5], [6,7,8],  
+            [0,3,6], [1,4,7], [2,5,8],  
+            [0,4,8], [2,4,6]            
+          ];
+          return ganadoras.some(combo =>
+            combo.every(i => valores[i] === jugador)
+          );
+        }
+
+        if (verificarGanador(values, 1)) {
+          document.getElementById('result').innerHTML = '<h2 style="color:pink">¡Ganaste! </h2>';
+          return;
+        }
+
+        if (verificarGanador(values, -1)) {
+          document.getElementById('result').innerHTML = '<h2 style="color:red">Perdiste. La IA ya ganó</h2>';
+          return;
+        }
+
+        const userMoves = values.filter(v => v === 1).length;
+        const iaMoves = values.filter(v => v === -1).length;
+
+        if (userMoves !== iaMoves + 1) {
+          document.getElementById('result').innerHTML = '<span style="color:red">Solo podés hacer una jugada por turno (colocá un solo "1").</span>';
+          return;
+        }
+
+        const boardTensor = tf.tensor(values).reshape([1, 9]);
+        const prediction = model.predict(boardTensor);
+        const predictionArray = await prediction.array();
+        const scores = predictionArray[0];
+
+        let IAMove = -1;
+        let bestScore = -Infinity;
+
+        for (let i = 0; i < scores.length; i++) {
+          if (values[i] === 0 && scores[i] > bestScore) {
+            bestScore = scores[i];
+            IAMove = i;
+          }
+        }
+
+        if (IAMove === -1) {
+          document.getElementById('result').innerHTML = 'Empate o tablero completo.';
+          return;
+        }
+
+    
+        inputs[IAMove].value = -1;
+        document.getElementById('result').innerHTML = `<h2>IA jugó en la posición ${IAMove}</h2>`;
+
+        const newValues = Array.from(inputs).map(input => Number(input.value || 0));
+        if (verificarGanador(newValues, -1)) {
+          document.getElementById('result').innerHTML += '<h2 style="color:red">¡La IA ganó!</h2>';
+        }
+      }
+
+      function reiniciarTablero() {
+        const inputs = document.querySelectorAll('#board input');
+        inputs.forEach(input => input.value = 0);
+        document.getElementById('result').innerHTML = '';
+      }
+    </script>
+  </body>
+</html>
+
